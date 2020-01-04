@@ -89,7 +89,7 @@ def unravel_index(ind, tensor_shape):
     unraveled_coords = (ind % strides) // strides_shifted
     return tf.transpose(unraveled_coords)
 
-@lru_cache()
+@lru_cache() #NOTE: is the default cache size large enough?
 def get_prefac_tensor(D, directory, save):
     """Equivalent to the functionality of shared_ops the bs_factors functions from shared_ops,
     but caches the return value as a tensor. This allows us to re-use the same prefactors and save
@@ -587,6 +587,12 @@ def squeezer(r, theta, mode, in_modes, D, pure=True, batched=False):
     """returns squeezer unitary matrix on specified input modes"""
     matrix = squeezer_matrix(r, theta, D, batched)
     output = single_mode_gate(matrix, mode, in_modes, pure, batched)
+    return output
+
+def two_mode_squeezer(r, theta, mode1, mode2, in_modes, D, pure=True, batched=False):
+    """returns 2-mode squeezer unitary matrix on specified input modes"""
+    matrix = two_mode_squeezer_matrix(t, r, D, batched)
+    output = two_mode_gate(matrix, mode1, mode2, in_modes, pure, batched)
     return output
 
 def kerr_interaction(kappa, mode, in_modes, D, pure=True, batched=False):
