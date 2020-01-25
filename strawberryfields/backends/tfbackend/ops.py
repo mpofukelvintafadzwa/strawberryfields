@@ -160,6 +160,32 @@ def squeezer_matrix(r, theta, D, batched=False):
         output = tf.squeeze(output, 0)
     return output
 
+def two_mode_squeezer_matrix(r, theta, D, batched=False):
+
+    if not batched:
+        r = tf.cast(r, def_type)[None, ...]
+        theta = tf.cast(theta, def_type)[None, ...]
+    
+    cr = tf.math.cosh(r)
+    tr = tf.math.tanh(r)
+    lcr = tf.math.log(cr)
+
+    a = np.diag(np.sqrt(np.arange(1,D)), k=1)
+    ab = tf.convert_to_tensor(np.kron(a,a), dtype=def_type)[None, ...]
+    
+    coeff = -tr*tf.exp(1.0j*theta)
+    L = tf.linalg.expm(coeff[:, None, None]*tf.transpose(ab, [0,2,1]))
+    
+    coeff = tr*tf.exp(-1.0j*theta)
+    U = tf.linalg.expm(coeff[:, None, None]*ab)
+    
+    E = tf.math.exp(-lcr*np.arange(D)[None, :])
+    D_diags = tf.reshape(tf.vectorized_map(lambda x: tf.tensordot(x, x, axes=0), E), [-1, D**2])/cr
+
+    output = tf.einsum('abcde->abdce', tf.reshape(tf.einsum('bij,bj,bjk->bik', L, D_diags, U), [-1, D, D, D, D]))
+
+    return tf.squeeze(output, axis=0)
+
 def phase_shifter_matrix(theta, D, batched=False):
     """creates the single mode phase shifter matrix"""
     if batched:
