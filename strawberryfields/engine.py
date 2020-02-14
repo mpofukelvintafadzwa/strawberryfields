@@ -19,14 +19,20 @@ One can think of each BaseEngine instance as a separate quantum computation.
 """
 import abc
 import collections.abc
+import enum
 import time
 
 import numpy as np
 
 from .backends import load_backend
-from .backends.base import (NotApplicableError, BaseBackend)
+from .backends.base import NotApplicableError, BaseBackend
 
-from strawberryfields.api_client import APIClient, Job, JobNotQueuedError, JobExecutionError
+from strawberryfields.api_client import (
+    APIClient,
+    Job,
+    JobNotQueuedError,
+    JobExecutionError,
+)
 from strawberryfields.io import to_blackbird
 from strawberryfields.configuration import DEFAULT_CONFIG
 
@@ -37,7 +43,6 @@ class OneJobAtATimeError(Exception):
 
 # for automodapi, do not include the classes that should appear under the top-level strawberryfields namespace
 __all__ = ["Result", "BaseEngine", "LocalEngine"]
-
 
 
 class Result:
@@ -351,7 +356,9 @@ class BaseEngine(abc.ABC):
         # signatures of methods in Operations to remain cleaner, since only
         # Measurements need to know about shots
 
-        prev = self.run_progs[-1] if self.run_progs else None  # previous program segment
+        prev = (
+            self.run_progs[-1] if self.run_progs else None
+        )  # previous program segment
         for p in program:
             if prev is None:
                 # initialize the backend
@@ -360,7 +367,9 @@ class BaseEngine(abc.ABC):
                 # there was a previous program segment
                 if not p.can_follow(prev):
                     raise RuntimeError(
-                        "Register mismatch: program {}, '{}'.".format(len(self.run_progs), p.name)
+                        "Register mismatch: program {}, '{}'.".format(
+                            len(self.run_progs), p.name
+                        )
                     )
 
                 # Copy the latest measured values in the RegRefs of p.
@@ -384,7 +393,8 @@ class BaseEngine(abc.ABC):
                 self._run_program(p, **kwargs)
                 shots = kwargs.get("shots", 1)
                 self.samples = [
-                    _broadcast_nones(p.reg_refs[k].val, shots) for k in sorted(p.reg_refs)
+                    _broadcast_nones(p.reg_refs[k].val, shots)
+                    for k in sorted(p.reg_refs)
                 ]
                 self.run_progs.append(p)
 
@@ -456,7 +466,9 @@ class LocalEngine(BaseEngine):
             except NotApplicableError:
                 # command is not applicable to the current backend type
                 raise NotApplicableError(
-                    "The operation {} cannot be used with {}.".format(cmd.op, self.backend)
+                    "The operation {} cannot be used with {}.".format(
+                        cmd.op, self.backend
+                    )
                 ) from None
             except NotImplementedError:
                 # command not directly supported by backend API
@@ -518,7 +530,9 @@ class LocalEngine(BaseEngine):
             key: temp_run_options[key] for key in temp_run_options.keys() & eng_run_keys
         }
 
-        result = super()._run(program, args=args, compile_options=compile_options, **eng_run_options)
+        result = super()._run(
+            program, args=args, compile_options=compile_options, **eng_run_options
+        )
 
         modes = temp_run_options["modes"]
 
@@ -529,6 +543,153 @@ class LocalEngine(BaseEngine):
             result._state = self.backend.state(**temp_run_options)
 
         return result
+
+
+# TODO placeholder class while Antal builds the real one
+class Config:
+    @property
+    def token(self):
+        return "api-key-placeholder"
+
+    @property
+    def host(self):
+        return "host-placeholder"
+
+    @property
+    def port(self):
+        return 443
+
+
+# TODO this will eventually replace the former class
+class StarshipEngine2:
+    """Remote quantum program executor engine.
+
+    TODO
+
+    Args:
+        config (TODO config object): TODO global configuration object
+    """
+
+    POLLING_INTERVAL_SECONDS = 1
+
+    def __init__(self, config=None):
+        if config is None:
+            # TODO read from env, etc.
+            config = Config()
+
+        self._connection = Connection(config)
+
+        @property
+        def connection(self):
+            """TODO"""
+            return self._connection
+
+        def run(self, program):
+            """Runs a synchronous remote job. TODO"""
+            # TODO handle job creation error
+            job_id = self._connection.create_job()
+            job = Job()
+            try:
+                while True:
+                    # TODO check status of job
+                    # if complete/failed, handle and return Job
+                    time.sleep(self.POLLING_INTERVAL_SECONDS)
+            except KeyboardInterrupt:
+                self._connection.cancel_job(job_id)
+
+        def run_async(self, program):
+            """Runs an asynchronous remote job. TODO"""
+            circuit = self._serialize_program(program)
+            job_id = self._connection.create_job()
+            return Job(
+                job_id,
+                circuit=circuit,
+                status=JobStatus.QUEUED,
+                connection=self._connection,
+            )
+
+        def _serialize_program(self, program):
+            bb = to_blackbird(program, version="1.0")
+            bb._target["name"] = "TODO"
+            bb._target["options"] = {"shots": shots, **program.backend_options}
+            return bb.serialize()
+
+
+class Connection:
+    """TODO"""
+
+    # TODO can we get this from the Program?
+    DEVICE = "chip2"
+
+    def __init__(self, config):
+        self._config = config
+
+    @property
+    def host(self):
+        return self._config.host
+
+    @property
+    def token(self):
+        return self._config.token
+
+    def get_all_jobs(self):
+        # GET /jobs
+        # TODO
+        return []
+
+    def get_job(self, job_id):
+        # GET /jobs/{id}
+        # TODO
+        return Job()
+
+    def cancel_job(self, job_id):
+        # PATCH /jobs/{id}
+        # TODO
+        return True
+
+
+class Job:
+    """TODO"""
+
+    def __init__(self, job_id, circuit, status, connection):
+        self._job_id = job_id
+        self._circuit = circuit
+        self._status = status
+        self._connection = connection
+        self._result = None
+
+    @property
+    def result(self):
+        """TODO"""
+        return self._result
+
+    @property
+    def status(self):
+        """TODO"""
+        return self._status
+
+    @property
+    def circuit(self):
+        """TODO"""
+        return self._circuit
+
+    def refresh(self):
+        """TODO"""
+        if self._status in (JobStatus.CANCELLED, JobStatus.COMPLETE, JobStatus.FAILED):
+            # TODO raise exception
+            return
+        self._result = self._connection.get_job_result(job_id)
+        self._status = self._connection.get_job_status(job_id)
+
+
+class JobStatus(enum.Enum):
+    """TODO"""
+
+    OPEN = "open"
+    QUEUED = "queued"
+    CANCELLED = "cancelled"
+    COMPLETE = "complete"
+    FAILED = "failed"
 
 
 class StarshipEngine(BaseEngine):
@@ -550,7 +711,9 @@ class StarshipEngine(BaseEngine):
     def __init__(self, backend, polling_delay_seconds=1, **kwargs):
         super().__init__(backend)
 
-        api_client_params = {k: v for k, v in kwargs.items() if k in DEFAULT_CONFIG["api"].keys()}
+        api_client_params = {
+            k: v for k, v in kwargs.items() if k in DEFAULT_CONFIG["api"].keys()
+        }
         self.client = APIClient(**api_client_params)
         self.polling_delay_seconds = polling_delay_seconds
         self.jobs = []
@@ -687,5 +850,6 @@ class StarshipEngine(BaseEngine):
 
 class Engine(LocalEngine):
     """dummy"""
+
     # alias for backwards compatibility
     __doc__ = LocalEngine.__doc__
